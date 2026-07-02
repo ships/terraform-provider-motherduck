@@ -1,7 +1,12 @@
 # Terraform Provider for MotherDuck
 
+[![Terraform Registry](https://img.shields.io/badge/Terraform%20Registry-jpig18%2Fmotherduck-844FBA?logo=terraform)](https://registry.terraform.io/providers/jpig18/motherduck/latest)
+
 Manage [MotherDuck](https://motherduck.com) organization resources with Terraform,
 via the [MotherDuck REST API](https://motherduck.com/docs/api/rest-api/).
+
+**Published on the Terraform Registry:**
+[registry.terraform.io/providers/jpig18/motherduck](https://registry.terraform.io/providers/jpig18/motherduck/latest)
 
 Covers the **entire REST API surface** as of mid-2026:
 
