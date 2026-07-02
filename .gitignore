@@ -1,0 +1,20 @@
+# Binaries
+terraform-provider-motherduck
+dist/
+
+# Go
+*.test
+*.out
+vendor/
+
+# Terraform (from running examples locally)
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
