@@ -1,0 +1,19 @@
+# =============================================================================
+# OPTIONAL: exercise the ephemeral embed-session resource.
+#
+# Requires a real Dive UUID. To enable:
+#   1. rename this file to  embed_session.tf
+#   2. terraform apply -var 'dive_id=<your-dive-uuid>'
+#
+# The session token is ephemeral (never stored in state/plan), so success is
+# signalled by apply completing without error. A bad dive_id or a scope the
+# service account can't reach makes the apply fail loudly.
+# =============================================================================
+
+ephemeral "motherduck_embed_session" "verify" {
+  count = var.dive_id == "" ? 0 : 1
+
+  dive_id      = var.dive_id
+  username     = motherduck_service_account.verify.username
+  session_hint = "tfverify"
+}

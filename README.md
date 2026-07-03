@@ -64,7 +64,12 @@ resource "motherduck_duckling_config" "etl" {
 ```
 
 See [`docs/`](docs/) for the full reference and [`examples/`](examples/) for runnable
-configurations.
+configurations:
+
+- [`examples/complete`](examples/complete) — a service account, token, and Duckling config together.
+- [`examples/embed-session`](examples/embed-session) — the ephemeral Dive embed session.
+- [`examples/verify`](examples/verify) — an end-to-end smoke test that installs the provider
+  from the public registry and asserts every resource/data-source round-trips (via `check {}` blocks).
 
 ## Development
 
