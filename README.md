@@ -39,7 +39,7 @@ terraform {
 provider "motherduck" {}
 
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 resource "motherduck_token" "etl" {

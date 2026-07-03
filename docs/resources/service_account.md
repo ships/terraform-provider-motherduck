@@ -19,7 +19,7 @@ user's token list during refresh.
 
 ```terraform
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 ```
 
@@ -36,5 +36,5 @@ resource "motherduck_service_account" "etl" {
 ## Import
 
 ```shell
-terraform import motherduck_service_account.etl svc-etl
+terraform import motherduck_service_account.etl svc_etl
 ```

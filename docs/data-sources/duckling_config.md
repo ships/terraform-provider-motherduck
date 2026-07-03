@@ -13,7 +13,7 @@ Duckling (compute instance) configuration of a user
 
 ```terraform
 data "motherduck_duckling_config" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 output "etl_instance_size" {

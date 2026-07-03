@@ -57,5 +57,5 @@ Tokens are imported as `<username>/<token_id>`. The secret value cannot be recov
 so `token` remains null after import:
 
 ```shell
-terraform import motherduck_token.ci svc-etl/9a1b2c3d-...
+terraform import motherduck_token.ci svc_etl/9a1b2c3d-...
 ```

@@ -214,7 +214,7 @@ func (r *tokenResource) ImportState(ctx context.Context, req resource.ImportStat
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		resp.Diagnostics.AddError(
 			"Invalid import ID",
-			`Import a token as "<username>/<token_id>", e.g. "svc-etl/9a1b...".`,
+			`Import a token as "<username>/<token_id>", e.g. "svc_etl/9a1b...".`,
 		)
 		return
 	}

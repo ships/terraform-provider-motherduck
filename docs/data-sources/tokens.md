@@ -13,7 +13,7 @@ Secret token values are never returned by this endpoint.
 
 ```terraform
 data "motherduck_tokens" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 output "token_names" {

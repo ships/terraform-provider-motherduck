@@ -38,17 +38,17 @@ func TestCreateServiceAccount(t *testing.T) {
 		}
 		var body map[string]string
 		json.NewDecoder(r.Body).Decode(&body)
-		if body["username"] != "svc-etl" {
+		if body["username"] != "svc_etl" {
 			t.Errorf("username = %q", body["username"])
 		}
-		json.NewEncoder(w).Encode(map[string]string{"username": "svc-etl"})
+		json.NewEncoder(w).Encode(map[string]string{"username": "svc_etl"})
 	})
 
-	user, err := c.CreateServiceAccount(context.Background(), "svc-etl")
+	user, err := c.CreateServiceAccount(context.Background(), "svc_etl")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.Username != "svc-etl" {
+	if user.Username != "svc_etl" {
 		t.Errorf("Username = %q", user.Username)
 	}
 }

@@ -52,5 +52,5 @@ resource "motherduck_duckling_config" "etl" {
 ## Import
 
 ```shell
-terraform import motherduck_duckling_config.etl svc-etl
+terraform import motherduck_duckling_config.etl svc_etl
 ```

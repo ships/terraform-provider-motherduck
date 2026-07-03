@@ -33,19 +33,39 @@ func TestAccServiceAccount(t *testing.T) {
 			{
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("motherduck_service_account.etl", "username", "svc-etl"),
-					resource.TestCheckResourceAttr("motherduck_service_account.etl", "id", "svc-etl"),
+					resource.TestCheckResourceAttr("motherduck_service_account.etl", "username", "svc_etl"),
+					resource.TestCheckResourceAttr("motherduck_service_account.etl", "id", "svc_etl"),
 				),
 			},
 			{
 				ResourceName:      "motherduck_service_account.etl",
 				ImportState:       true,
-				ImportStateId:     "svc-etl",
+				ImportStateId:     "svc_etl",
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccServiceAccountInvalidUsername(t *testing.T) {
+	api := newMockAPI()
+	baseURL := api.start(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(baseURL) + `
+resource "motherduck_service_account" "bad" {
+  username = "has-a-hyphen"
+}
+`,
+				// Caught at plan time by the validator, before any API call.
+				ExpectError: regexp.MustCompile(`letters, numbers, and underscores`),
 			},
 		},
 	})
@@ -61,7 +81,7 @@ func TestAccToken(t *testing.T) {
 			{
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 resource "motherduck_token" "ci" {
@@ -81,7 +101,7 @@ resource "motherduck_token" "ci" {
 				// Changing the name forces a replacement (no update API).
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 resource "motherduck_token" "ci" {
@@ -132,7 +152,7 @@ func TestAccDucklingConfig(t *testing.T) {
 			{
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 resource "motherduck_duckling_config" "etl" {
@@ -159,7 +179,7 @@ resource "motherduck_duckling_config" "etl" {
 				// In-place update (PUT), no replacement.
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 resource "motherduck_duckling_config" "etl" {
@@ -195,7 +215,7 @@ func TestAccDataSources(t *testing.T) {
 			{
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
-  username = "svc-etl"
+  username = "svc_etl"
 }
 
 resource "motherduck_token" "ci" {
@@ -221,7 +241,7 @@ data "motherduck_duckling_config" "etl" {
 					resource.TestCheckResourceAttr("data.motherduck_tokens.etl", "tokens.#", "1"),
 					resource.TestCheckResourceAttr("data.motherduck_tokens.etl", "tokens.0.name", "ci-token"),
 					resource.TestCheckResourceAttr("data.motherduck_active_accounts.all", "accounts.#", "1"),
-					resource.TestCheckResourceAttr("data.motherduck_active_accounts.all", "accounts.0.username", "svc-etl"),
+					resource.TestCheckResourceAttr("data.motherduck_active_accounts.all", "accounts.0.username", "svc_etl"),
 					resource.TestCheckResourceAttr("data.motherduck_duckling_config.etl", "read_write.instance_size", "pulse"),
 				),
 			},

@@ -3,16 +3,25 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 
 	"github.com/jpig18/terraform-provider-motherduck/internal/client"
 )
+
+// usernameRegex matches MotherDuck's server-side rule: the API rejects anything
+// but letters, numbers, and underscores. Validating here surfaces the problem at
+// plan time instead of as a mid-apply HTTP 400.
+var usernameRegex = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 var (
 	_ resource.Resource                = (*serviceAccountResource)(nil)
@@ -49,9 +58,14 @@ func (r *serviceAccountResource) Schema(_ context.Context, _ resource.SchemaRequ
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"username": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Username for the service account. Changing it replaces the account.",
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Required: true,
+				MarkdownDescription: "Username for the service account. May contain only letters, numbers, " +
+					"and underscores. Changing it replaces the account.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(usernameRegex,
+						"must contain only letters, numbers, and underscores"),
+				},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 		},
 	}

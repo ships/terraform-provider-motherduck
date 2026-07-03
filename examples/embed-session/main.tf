@@ -16,7 +16,7 @@ variable "dive_id" {
 }
 
 resource "motherduck_service_account" "embed" {
-  username = "svc-embed"
+  username = "svc_embed"
 }
 
 # The session token is ephemeral: never written to state or plan.
