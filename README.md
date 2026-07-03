@@ -71,25 +71,70 @@ configurations:
 - [`examples/verify`](examples/verify) — an end-to-end smoke test that installs the provider
   from the public registry and asserts every resource/data-source round-trips (via `check {}` blocks).
 
+## Testing
+
+There are three layers, cheapest first. The first two need **no credentials and
+no MotherDuck account** — they run against an in-memory mock of the REST API.
+
+### 1. Unit tests (client)
+
+Exercise the HTTP client directly (auth header, request/response shapes, error
+parsing) against an `httptest` server:
+
+```bash
+go test ./internal/client/
+```
+
+### 2. Acceptance tests (provider)
+
+Drive real Terraform plan/apply/import cycles through the provider against the
+in-memory mock API. `TF_ACC=1` is required or they're skipped:
+
+```bash
+TF_ACC=1 go test ./internal/provider/ -v
+```
+
+- Terraform is auto-downloaded by the test framework. To use a specific binary
+  instead, set `TF_ACC_TERRAFORM_PATH=/path/to/terraform`.
+- Ephemeral-resource coverage needs Terraform **1.10+**.
+
+Run everything (unit + acceptance) plus vet and formatting — the same gates CI runs:
+
+```bash
+go build ./... && go vet ./... && test -z "$(gofmt -l .)"
+TF_ACC=1 go test ./...
+```
+
+### 3. Live end-to-end (against a real MotherDuck org)
+
+[`examples/verify`](examples/verify) installs the provider **from the public
+registry** and exercises every resource and data source, asserting each
+round-trip with `check {}` blocks so a bad run fails loudly. This one hits the
+real API and needs an **Admin** token:
+
+```bash
+cd examples/verify
+export MOTHERDUCK_API_TOKEN=<admin token>
+terraform init      # installs jpig18/motherduck from the registry
+terraform apply     # creates a throwaway service account + token + config, runs checks
+terraform destroy   # cleanup (permanently deletes the test service account)
+```
+
+A clean apply with all checks passing means every function works against the live
+API. See [`examples/verify/README.md`](examples/verify/README.md) for the optional
+embed-session test and name overrides.
+
 ## Development
 
 Requirements: Go 1.24+, Terraform 1.10+.
 
 ```bash
 go build ./...
-
-# Unit tests
-go test ./...
-
-# Acceptance tests (run against an in-memory mock of the MotherDuck API)
-TF_ACC=1 go test ./... -v
 ```
 
-To point acceptance tests at a specific Terraform binary, set `TF_ACC_TERRAFORM_PATH`.
-
-To use a local build in Terraform, add a
+To use a local build in Terraform without publishing, add a
 [dev override](https://developer.hashicorp.com/terraform/cli/config/config-file#development-overrides-for-provider-developers)
-to `~/.terraformrc`:
+to a `.terraformrc` (point `TF_CLI_CONFIG_FILE` at it, or use `~/.terraformrc`):
 
 ```hcl
 provider_installation {
@@ -99,6 +144,10 @@ provider_installation {
   direct {}
 }
 ```
+
+With a dev override in effect, skip `terraform init` — Terraform uses the local
+binary directly. Rebuild (`go build -o terraform-provider-motherduck .`) after each
+change.
 
 ## Releasing
 
