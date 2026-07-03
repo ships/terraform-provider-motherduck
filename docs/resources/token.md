@@ -53,9 +53,17 @@ resource "aws_secretsmanager_secret_version" "motherduck" {
 
 ## Import
 
-Tokens are imported as `<username>/<token_id>`. The secret value cannot be recovered,
-so `token` remains null after import:
+Tokens are imported as `<username>/<token_id>`:
 
 ```shell
 terraform import motherduck_token.ci svc_etl/9a1b2c3d-...
 ```
+
+Two caveats, both because the API does not return them:
+
+- The secret `token` value cannot be recovered, so it remains null after import.
+- `ttl_seconds` cannot be recovered either (the API exposes `expires_at`, not the
+  original lifetime). If your config sets `ttl_seconds`, the next plan will show the
+  token being **replaced** (`ttl_seconds` forces replacement). Import is therefore
+  most useful for non-expiring tokens; for a token created with a TTL, expect a
+  one-time recreate on the first apply after import.
