@@ -101,6 +101,9 @@ func (p *motherduckProvider) Resources(_ context.Context) []func() resource.Reso
 		NewServiceAccountResource,
 		NewTokenResource,
 		NewDucklingConfigResource,
+		NewDatabaseResource,
+		NewShareResource,
+		NewShareAttachmentResource,
 	}
 }
 
