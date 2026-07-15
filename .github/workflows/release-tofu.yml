@@ -20,7 +20,7 @@ jobs:
       matrix:
         include:
           - { goos: darwin, goarch: arm64, runner: macos-14 }
-          - { goos: darwin, goarch: amd64, runner: macos-13 }
+          - { goos: darwin, goarch: amd64, runner: macos-14 }
           - { goos: linux, goarch: amd64, runner: ubuntu-latest }
           - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build + zip (native CGO)
+      - name: Build + zip (CGO)
         shell: bash
         env:
           GOOS: ${{ matrix.goos }}
@@ -37,6 +37,15 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           BIN="terraform-provider-motherduck_v${VERSION}"
+          # darwin/amd64 is cross-built on the arm64 runner: the macOS SDK is
+          # universal, so clang -arch selects the target slice and links
+          # go-duckdb's matching prebuilt bindings. Linux targets build natively.
+          if [ "$GOOS" = darwin ]; then
+            case "$GOARCH" in
+              amd64) export CC="clang -arch x86_64" ;;
+              arm64) export CC="clang -arch arm64" ;;
+            esac
+          fi
           CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "$BIN" .
           ZIP="terraform-provider-motherduck_${VERSION}_${GOOS}_${GOARCH}.zip"
           zip "$ZIP" "$BIN" LICENSE
@@ -67,11 +76,13 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cd dist
-          SUMS="terraform-provider-motherduck_${VERSION}_SHA256SUMS"
-          sha256sum terraform-provider-motherduck_"${VERSION}"_*.zip > "$SUMS"
-          gpg --batch --local-user "$FPR" --detach-sign "$SUMS"
           cp "$GITHUB_WORKSPACE/terraform-registry-manifest.json" \
              "terraform-provider-motherduck_${VERSION}_manifest.json"
+          SUMS="terraform-provider-motherduck_${VERSION}_SHA256SUMS"
+          sha256sum \
+            terraform-provider-motherduck_"${VERSION}"_*.zip \
+            "terraform-provider-motherduck_${VERSION}_manifest.json" > "$SUMS"
+          gpg --batch --local-user "$FPR" --detach-sign "$SUMS"
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
