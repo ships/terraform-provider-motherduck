@@ -21,6 +21,12 @@ of a restricted share's grantees, so refresh does not read the granted user set 
 out-of-band `GRANT`/`REVOKE` does not surface as drift. Grants apply only when `access` is
 `restricted`.
 
+-> `update_mode` defaults to `automatic`: the share tracks the source and republishes
+committed writes within minutes. `manual` freezes the share as a static snapshot that only
+`UPDATE SHARE` republishes, and is valid **only for a standard database** — a DuckLake
+source admits automatic mode only, so `update_mode = "manual"` against one is rejected at
+apply (the source type is inspected then, since it is not knowable at plan time).
+
 ## Example Usage
 
 ```terraform
@@ -66,6 +72,11 @@ output "share_url" {
   `unrestricted` (all MotherDuck users in the same cloud region). Changing it replaces the
   share because the only SQL path to change access is `CREATE OR REPLACE SHARE`, which
   rotates the URL.
+- `update_mode` (String) `automatic` (default; the share tracks source writes) or `manual`
+  (a static snapshot republished only by `UPDATE SHARE`). `manual` is valid only for a
+  standard database — a DuckLake source admits `automatic` only. Changing it replaces the
+  share, as update mode is fixed at `CREATE SHARE` and rotates the URL via
+  `CREATE OR REPLACE SHARE`.
 - `grant_to` (List of String) Account usernames granted READ on this share. Applies only
   when `access` is `restricted`. Not read back from the server, so it never shows drift.
 
@@ -78,9 +89,9 @@ output "share_url" {
 
 The import ID is `<token>,<share-name>`. The token is part of the ID because the read
 that follows import must reach the owning account; it is the account's data-plane token,
-the same value the resource's `token` attribute takes. `grant_to`, `database`, and
-`access` are not recoverable from `OWNED_SHARES`, so verify them against configuration
-after import.
+the same value the resource's `token` attribute takes. `grant_to`, `database`, `access`,
+and `update_mode` are not recoverable from `OWNED_SHARES`, so verify them against
+configuration after import.
 
 ```shell
 terraform import motherduck_share.analytics "$MOTHERDUCK_TOKEN,analytics_share"

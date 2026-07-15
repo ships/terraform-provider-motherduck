@@ -18,7 +18,7 @@ type sqlBackedResource struct{}
 
 // tokenAttribute is the per-resource data-plane token. LengthAtLeast(1) rejects
 // the empty string at plan time: an empty token would otherwise resolve to a
-// local in-memory duckdb (see client.dsnFor) and silently target a throwaway
+// local in-memory duckdb (see client.bootstrap) and silently target a throwaway
 // database instead of MotherDuck, masking misconfiguration as a no-op.
 func (sqlBackedResource) tokenAttribute() schema.StringAttribute {
 	return schema.StringAttribute{
