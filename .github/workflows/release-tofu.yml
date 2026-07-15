@@ -1,0 +1,80 @@
+# Fork release for the OpenTofu registry (ships/motherduck). The data plane is
+# CGO (go-duckdb), which cannot cross-compile, so each target is built on its own
+# native runner; a final job signs the artifacts and publishes the GitHub Release
+# the registry ingests. Trigger by pushing a semver tag (v0.1.0).
+# Requires repo secrets: GPG_PRIVATE_KEY, PASSPHRASE.
+name: Release (OpenTofu registry)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: darwin, goarch: arm64, runner: macos-14 }
+          - { goos: darwin, goarch: amd64, runner: macos-13 }
+          - { goos: linux, goarch: amd64, runner: ubuntu-latest }
+          - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build + zip (native CGO)
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BIN="terraform-provider-motherduck_v${VERSION}"
+          CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "$BIN" .
+          ZIP="terraform-provider-motherduck_${VERSION}_${GOOS}_${GOARCH}.zip"
+          zip "$ZIP" "$BIN"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.ZIP }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Import GPG key
+        id: gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+      - name: Assemble + sign registry artifacts
+        env:
+          FPR: ${{ steps.gpg.outputs.fingerprint }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd dist
+          SUMS="terraform-provider-motherduck_${VERSION}_SHA256SUMS"
+          sha256sum terraform-provider-motherduck_"${VERSION}"_*.zip > "$SUMS"
+          gpg --batch --local-user "$FPR" --detach-sign "$SUMS"
+          cp "$GITHUB_WORKSPACE/terraform-registry-manifest.json" \
+             "terraform-provider-motherduck_${VERSION}_manifest.json"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

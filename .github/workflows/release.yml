@@ -13,6 +13,10 @@ permissions:
 
 jobs:
   goreleaser:
+    # Upstream's registry release is pure-Go (CGO_ENABLED=0). This fork adds a
+    # CGO (go-duckdb) data plane it cannot build, and releases via
+    # release-tofu.yml instead, so this job runs only in the upstream repository.
+    if: github.repository == 'jpig18/terraform-provider-motherduck'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
