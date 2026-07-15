@@ -224,6 +224,15 @@ func (r *shareResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
+	// access is RequiresReplace, so plan and state agree here. Grants apply only
+	// to restricted shares; an unrestricted share grants to everyone in-region and
+	// GRANT/REVOKE on it is a server error, so grant_to is inert and skipped.
+	if plan.Access.ValueString() != "restricted" {
+		plan.ShareURL = state.ShareURL
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+		return
+	}
+
 	name := plan.Name.ValueString()
 	client := r.clientFor(plan.Token.ValueString())
 
@@ -275,7 +284,13 @@ func (r *shareResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 }
 
 func (r *shareResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
+	token, name, ok := splitImportID(req.ID)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid import ID", "expected `<token>,<share-name>`")
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("token"), token)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), name)...)
 }
 
 // readShareURL runs shareUrlSQL and returns the `url` column of the single
@@ -302,7 +317,7 @@ func (r *shareResource) readShareURL(ctx context.Context, client sqlQuerier, nam
 		return "", false, fmt.Errorf("OWNED_SHARES has no `url` column")
 	}
 
-	for rows.Next() {
+	if rows.Next() {
 		cells := make([]any, len(cols))
 		for i := range cells {
 			cells[i] = new(any)
@@ -314,7 +329,6 @@ func (r *shareResource) readShareURL(ctx context.Context, client sqlQuerier, nam
 			url = v
 		}
 		found = true
-		break
 	}
 	if err := rows.Err(); err != nil {
 		return "", false, err

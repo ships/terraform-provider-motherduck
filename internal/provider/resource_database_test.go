@@ -61,11 +61,10 @@ resource "motherduck_database" "demo" {
 				),
 			},
 			{
-				ResourceName:            "motherduck_database.demo",
-				ImportState:             true,
-				ImportStateId:           "tf_provider_acc_demo",
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"token"},
+				ResourceName:      "motherduck_database.demo",
+				ImportState:       true,
+				ImportStateId:     token + ",tf_provider_acc_demo",
+				ImportStateVerify: true,
 			},
 		},
 	})

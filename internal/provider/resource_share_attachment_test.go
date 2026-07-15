@@ -42,7 +42,7 @@ func TestDetachSQLQuotesAlias(t *testing.T) {
 func TestListAttachedSharesSQL(t *testing.T) {
 	got := listAttachedSharesSQL()
 	want := `SELECT alias, is_attached, type, fully_qualified_name ` +
-		`FROM MD_ALL_DATABASES() WHERE type = 'MotherDuck share' AND is_attached = true;`
+		`FROM MD_ALL_DATABASES() WHERE type = 'motherduck share' AND is_attached = true;`
 	if got != want {
 		t.Fatalf("listAttachedSharesSQL: got %q, want %q", got, want)
 	}
@@ -85,9 +85,9 @@ resource "motherduck_share_attachment" "demo" {
 			{
 				ResourceName:            "motherduck_share_attachment.demo",
 				ImportState:             true,
-				ImportStateId:           "tf_provider_acc_attach_alias",
+				ImportStateId:           token + ",tf_provider_acc_attach_alias",
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"token", "share_url"},
+				ImportStateVerifyIgnore: []string{"share_url"},
 			},
 		},
 	})

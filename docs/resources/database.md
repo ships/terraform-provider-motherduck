@@ -50,9 +50,11 @@ resource "motherduck_database" "warehouse" {
 
 ## Import
 
-Import runs as the account whose `token` is set in configuration; the import ID is the
-database name.
+The import ID is `<token>,<database-name>`. The token is part of the ID because the
+managed database does not carry it and the initial read must reach the owning account
+to confirm the database exists. The token is the account's data-plane token, the same
+value the resource's `token` attribute takes.
 
 ```shell
-terraform import motherduck_database.warehouse warehouse
+terraform import motherduck_database.warehouse "$MOTHERDUCK_TOKEN,warehouse"
 ```

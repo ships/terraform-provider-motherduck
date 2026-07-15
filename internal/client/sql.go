@@ -18,15 +18,16 @@ type SQLClient struct{ token string }
 func NewSQLClient(token string) *SQLClient { return &SQLClient{token: token} }
 
 // dsnFor builds the duckdb DSN for a token. Empty token -> a local in-memory
-// duckdb (unit tests). saas_mode=true is required for MotherDuck data-plane
-// DDL: it binds the session to the token's owning account so CREATE
-// DATABASE/SHARE/ATTACH execute under that account's catalog ownership rather
-// than being rejected as an admin/service operation.
+// duckdb (unit tests). The token alone binds the session to its owning account,
+// so CREATE DATABASE/SHARE/ATTACH execute under that account's catalog
+// ownership. No additional connection options are supplied: DuckDB validates
+// DSN options at open time, before the MotherDuck extension autoloads, so any
+// extension-scoped option (e.g. saas_mode) is rejected as unrecognized.
 func dsnFor(token string) string {
 	if token == "" {
 		return ""
 	}
-	q := url.Values{"motherduck_token": {token}, "saas_mode": {"true"}}
+	q := url.Values{"motherduck_token": {token}}
 	return "md:?" + q.Encode()
 }
 

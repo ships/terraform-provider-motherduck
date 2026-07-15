@@ -98,11 +98,12 @@ resource "motherduck_share" "demo" {
 				),
 			},
 			{
-				ResourceName:            "motherduck_share.demo",
-				ImportState:             true,
-				ImportStateId:           "tf_provider_acc_share",
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"token", "grant_to", "database", "access"},
+				ResourceName:                         "motherduck_share.demo",
+				ImportState:                          true,
+				ImportStateId:                        token + ",tf_provider_acc_share",
+				ImportStateVerify:                    true,
+				ImportStateVerifyIdentifierAttribute: "name",
+				ImportStateVerifyIgnore:              []string{"grant_to", "database", "access"},
 			},
 		},
 	})

@@ -46,13 +46,13 @@ func TestDSNForEmptyTokenIsLocal(t *testing.T) {
 }
 
 func TestDSNForTokenBuildsMDDSN(t *testing.T) {
-	if got := dsnFor("abc"); got != "md:?motherduck_token=abc&saas_mode=true" {
+	if got := dsnFor("abc"); got != "md:?motherduck_token=abc" {
 		t.Fatalf("token dsn mismatch: got %q", got)
 	}
 }
 
 func TestDSNForTokenURLEncodesToken(t *testing.T) {
-	if got := dsnFor("a b/c+d"); got != "md:?motherduck_token=a+b%2Fc%2Bd&saas_mode=true" {
+	if got := dsnFor("a b/c+d"); got != "md:?motherduck_token=a+b%2Fc%2Bd" {
 		t.Fatalf("token not url-encoded: got %q", got)
 	}
 }

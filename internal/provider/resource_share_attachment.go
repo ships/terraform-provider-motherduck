@@ -45,7 +45,7 @@ func detachSQL(alias string) string {
 // account. Read scans the `alias` column to detect this attachment's presence.
 func listAttachedSharesSQL() string {
 	return "SELECT alias, is_attached, type, fully_qualified_name " +
-		"FROM MD_ALL_DATABASES() WHERE type = 'MotherDuck share' AND is_attached = true;"
+		"FROM MD_ALL_DATABASES() WHERE type = 'motherduck share' AND is_attached = true;"
 }
 
 func (r *shareAttachmentResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -180,6 +180,12 @@ func (r *shareAttachmentResource) Delete(ctx context.Context, req resource.Delet
 }
 
 func (r *shareAttachmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("alias"), req, resp)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	token, alias, ok := splitImportID(req.ID)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid import ID", "expected `<token>,<alias>`")
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("token"), token)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("alias"), alias)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), alias)...)
 }

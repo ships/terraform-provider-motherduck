@@ -53,10 +53,11 @@ resource "motherduck_share_attachment" "analytics" {
 
 ## Import
 
-Import runs as the account whose `token` is set in configuration; the import ID is the
-attach `alias`. `token` and `share_url` are not recoverable from the attached database
-alone, so verify them against configuration after import.
+The import ID is `<token>,<alias>`. The token is part of the ID because the read that
+follows import must reach the consumer account; it is that account's data-plane token,
+the same value the resource's `token` attribute takes. `share_url` is not recoverable
+from the attached database alone, so verify it against configuration after import.
 
 ```shell
-terraform import motherduck_share_attachment.analytics analytics
+terraform import motherduck_share_attachment.analytics "$MOTHERDUCK_TOKEN,analytics"
 ```

@@ -76,10 +76,12 @@ output "share_url" {
 
 ## Import
 
-Import runs as the account whose `token` is set in configuration; the import ID is the
-share name. `token`, `grant_to`, `database`, and `access` are not recoverable from the
-share URL alone, so verify against configuration after import.
+The import ID is `<token>,<share-name>`. The token is part of the ID because the read
+that follows import must reach the owning account; it is the account's data-plane token,
+the same value the resource's `token` attribute takes. `grant_to`, `database`, and
+`access` are not recoverable from `OWNED_SHARES`, so verify them against configuration
+after import.
 
 ```shell
-terraform import motherduck_share.analytics analytics_share
+terraform import motherduck_share.analytics "$MOTHERDUCK_TOKEN,analytics_share"
 ```
