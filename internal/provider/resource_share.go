@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -30,29 +32,57 @@ type shareResource struct {
 }
 
 type shareModel struct {
-	Name     types.String `tfsdk:"name"`
-	Database types.String `tfsdk:"database"`
-	Token    types.String `tfsdk:"token"`
-	Access   types.String `tfsdk:"access"`
-	GrantTo  types.List   `tfsdk:"grant_to"`
-	ShareURL types.String `tfsdk:"share_url"`
+	Name       types.String `tfsdk:"name"`
+	Database   types.String `tfsdk:"database"`
+	Token      types.String `tfsdk:"token"`
+	Access     types.String `tfsdk:"access"`
+	UpdateMode types.String `tfsdk:"update_mode"`
+	GrantTo    types.List   `tfsdk:"grant_to"`
+	ShareURL   types.String `tfsdk:"share_url"`
 }
 
 // createShareSQL composes CREATE SHARE. access maps "restricted"->RESTRICTED and
-// "unrestricted"->UNRESTRICTED; any other value is a modeling error and returns
-// an error rather than emitting unvalidated DDL.
-func createShareSQL(name, database, access string) (string, error) {
-	var clause string
+// "unrestricted"->UNRESTRICTED; updateMode maps "automatic"->UPDATE AUTOMATIC (the
+// share tracks source writes) and "manual"->UPDATE MANUAL (a static snapshot
+// republished only by UPDATE SHARE). Any other value is a modeling error and
+// returns an error rather than emitting unvalidated DDL. Legality of a
+// (source, updateMode) pair is enforced by the caller, not here — a DuckLake
+// admits only automatic mode.
+func createShareSQL(name, database, access, updateMode string) (string, error) {
+	var accessClause string
 	switch access {
 	case "restricted":
-		clause = "RESTRICTED"
+		accessClause = "ACCESS RESTRICTED"
 	case "unrestricted":
-		clause = "UNRESTRICTED"
+		accessClause = "ACCESS UNRESTRICTED"
 	default:
 		return "", fmt.Errorf("unsupported share access %q: must be \"restricted\" or \"unrestricted\"", access)
 	}
+	var updateClause string
+	switch updateMode {
+	case "automatic":
+		updateClause = "UPDATE AUTOMATIC"
+	case "manual":
+		updateClause = "UPDATE MANUAL"
+	default:
+		return "", fmt.Errorf("unsupported update mode %q: must be \"automatic\" or \"manual\"", updateMode)
+	}
 	return "CREATE SHARE " + quoteIdent(name) + " FROM " + quoteIdent(database) +
-		" (ACCESS " + clause + ");", nil
+		" (" + accessClause + ", " + updateClause + ");", nil
+}
+
+// showDatabasesSQL lists every database visible to the account with its type.
+// The type of a DuckLake carries the "ducklake" token (see isDuckLakeType); a
+// plain database is bare "motherduck". This is the only catalog surface that
+// distinguishes the two — duckdb_databases() reports "motherduck" for both.
+func showDatabasesSQL() string {
+	return "SHOW ALL DATABASES;"
+}
+
+// isDuckLakeType classifies a SHOW ALL DATABASES `type` value. MotherDuck reports
+// a DuckLake as "motherduck ducklake" and a plain database as bare "motherduck".
+func isDuckLakeType(dbType string) bool {
+	return strings.Contains(dbType, "ducklake")
 }
 
 func dropShareSQL(name string) string {
@@ -118,6 +148,19 @@ func (r *shareResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					"because the only SQL path to change access is `CREATE OR REPLACE SHARE`, which rotates the URL.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
+			"update_mode": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("automatic"),
+				MarkdownDescription: "How source writes propagate to the share: `automatic` (default) tracks the " +
+					"source and republishes committed changes within minutes; `manual` freezes the share as a static " +
+					"snapshot that only `UPDATE SHARE` republishes. `manual` is valid only for a standard database — a " +
+					"DuckLake source admits `automatic` only, and requesting `manual` for one is rejected at plan-apply. " +
+					"Changing it replaces the share because update mode is fixed at `CREATE SHARE` and can only be " +
+					"changed via `CREATE OR REPLACE SHARE`, which rotates the URL.",
+				Validators:    []validator.String{stringvalidator.OneOf("automatic", "manual")},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
 			"grant_to": schema.ListAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -145,11 +188,33 @@ func (r *shareResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	name := plan.Name.ValueString()
 	access := plan.Access.ValueString()
+	database := plan.Database.ValueString()
+	updateMode := plan.UpdateMode.ValueString()
 	client := r.clientFor(plan.Token.ValueString())
 
-	createSQL, err := createShareSQL(name, plan.Database.ValueString(), access)
+	// A DuckLake admits only automatic update mode. The source type is inspected
+	// solely to reject the illegal (DuckLake, manual) pair — automatic is valid for
+	// either source type and needs no inspection. This coupling of a config value
+	// (update_mode) to a live catalog fact (source type) can only be resolved at
+	// apply, so it surfaces here as a diagnostic rather than in schema validation.
+	if updateMode == "manual" {
+		ducklake, err := databaseIsDuckLake(ctx, client, database)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to inspect source database", err.Error())
+			return
+		}
+		if ducklake {
+			resp.Diagnostics.AddAttributeError(path.Root("update_mode"),
+				"Manual update mode unsupported for a DuckLake source",
+				"A DuckLake can only be shared in automatic update mode. Set update_mode to \"automatic\" "+
+					"(the default) or omit it.")
+			return
+		}
+	}
+
+	createSQL, err := createShareSQL(name, database, access, updateMode)
 	if err != nil {
-		resp.Diagnostics.AddAttributeError(path.Root("access"), "Invalid share access", err.Error())
+		resp.Diagnostics.AddError("Invalid share configuration", err.Error())
 		return
 	}
 	if err := client.Exec(ctx, createSQL); err != nil {
@@ -291,6 +356,55 @@ func (r *shareResource) ImportState(ctx context.Context, req resource.ImportStat
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("token"), token)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), name)...)
+}
+
+// databaseIsDuckLake reports whether the named source database is a DuckLake, by
+// scanning SHOW ALL DATABASES for the matching `alias`. A DuckLake must be shared
+// in automatic update mode; a source absent from the listing is treated as a
+// plain database (false) rather than an error — CREATE SHARE then surfaces any
+// genuine "database not found" from the server with its own diagnostics.
+func databaseIsDuckLake(ctx context.Context, client sqlQuerier, database string) (bool, error) {
+	rows, closeDB, err := client.Query(ctx, showDatabasesSQL())
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = closeDB() }()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return false, err
+	}
+	aliasIdx, typeIdx := -1, -1
+	for i, c := range cols {
+		switch c {
+		case "alias":
+			aliasIdx = i
+		case "type":
+			typeIdx = i
+		}
+	}
+	if aliasIdx < 0 || typeIdx < 0 {
+		return false, fmt.Errorf("SHOW ALL DATABASES lacks `alias`/`type` columns")
+	}
+
+	for rows.Next() {
+		cells := make([]any, len(cols))
+		for i := range cells {
+			cells[i] = new(any)
+		}
+		if err := rows.Scan(cells...); err != nil {
+			return false, err
+		}
+		alias, aliasOK := (*cells[aliasIdx].(*any)).(string)
+		dbType, typeOK := (*cells[typeIdx].(*any)).(string)
+		if aliasOK && typeOK && alias == database {
+			return isDuckLakeType(dbType), nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // readShareURL runs shareUrlSQL and returns the `url` column of the single
