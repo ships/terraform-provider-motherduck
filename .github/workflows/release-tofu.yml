@@ -39,7 +39,7 @@ jobs:
           BIN="terraform-provider-motherduck_v${VERSION}"
           CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "$BIN" .
           ZIP="terraform-provider-motherduck_${VERSION}_${GOOS}_${GOARCH}.zip"
-          zip "$ZIP" "$BIN"
+          zip "$ZIP" "$BIN" LICENSE
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
