@@ -53,21 +53,32 @@ func TestAccDatabase_basic(t *testing.T) {
 			{
 				Config: `
 resource "motherduck_database" "demo" {
-  name            = "tf_provider_acc_demo"
-  token           = "` + token + `"
-  deletion_policy = "cascade"
+  name  = "tf_provider_acc_demo"
+  token = "` + token + `"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("motherduck_database.demo", "name", "tf_provider_acc_demo"),
 					resource.TestCheckResourceAttr("motherduck_database.demo", "id", "tf_provider_acc_demo"),
+					resource.TestCheckResourceAttr("motherduck_database.demo", "deletion_policy", "prevent"),
 				),
 			},
 			{
+				// Import seeds deletion_policy=prevent, matching the default applied above.
 				ResourceName:      "motherduck_database.demo",
 				ImportState:       true,
 				ImportStateId:     token + ",tf_provider_acc_demo",
 				ImportStateVerify: true,
+			},
+			{
+				// Relax so the framework's post-test destroy may drop the database.
+				Config: `
+resource "motherduck_database" "demo" {
+  name            = "tf_provider_acc_demo"
+  token           = "` + token + `"
+  deletion_policy = "cascade"
+}
+`,
 			},
 		},
 	})
