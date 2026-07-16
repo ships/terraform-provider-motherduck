@@ -2,13 +2,18 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 )
 
 var (
@@ -25,9 +30,10 @@ type databaseResource struct {
 }
 
 type databaseModel struct {
-	ID    types.String `tfsdk:"id"`
-	Name  types.String `tfsdk:"name"`
-	Token types.String `tfsdk:"token"`
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	Token          types.String `tfsdk:"token"`
+	DeletionPolicy types.String `tfsdk:"deletion_policy"`
 }
 
 func createDatabaseSQL(name string) string {
@@ -36,6 +42,10 @@ func createDatabaseSQL(name string) string {
 
 func dropDatabaseSQL(name string) string {
 	return "DROP DATABASE " + quoteIdent(name) + ";"
+}
+
+func dropDatabaseCascadeSQL(name string) string {
+	return "DROP DATABASE " + quoteIdent(name) + " CASCADE;"
 }
 
 // listDatabasesSQL lists every database visible to the account. The database
@@ -57,8 +67,8 @@ func (r *databaseResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 		MarkdownDescription: "A MotherDuck database, managed via `CREATE DATABASE` / `DROP DATABASE` DDL run " +
 			"over a data-plane SQL connection. MotherDuck exposes databases only over SQL, not the REST API, " +
 			"so this resource authenticates with a per-resource account `token` rather than the provider's admin token.\n\n" +
-			"~> **Destroying this resource drops the database. `DROP DATABASE` uses the default `RESTRICT`, " +
-			"so the delete fails if a share was created from this database.**",
+			"~> **`deletion_policy` defaults to `prevent`, so destroying is refused until you set it to " +
+			"`cascade` (`DROP DATABASE ... CASCADE`) or `retain` (drops it from state, keeps the database).**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -71,6 +81,18 @@ func (r *databaseResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"token": tokenAttr,
+			"deletion_policy": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("prevent"),
+				MarkdownDescription: "Behavior when this resource is destroyed: `prevent` (default) refuses the " +
+					"destroy; `retain` removes it from Terraform state while leaving the database in MotherDuck; " +
+					"`cascade` runs `DROP DATABASE ... CASCADE`, dropping the database and its dependents. " +
+					"Changing this value is an in-place update, not a replacement.",
+				Validators: []validator.String{
+					stringvalidator.OneOf("cascade", "retain", "prevent"),
+				},
+			},
 		},
 	}
 }
@@ -153,9 +175,13 @@ func (r *databaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *databaseResource) Update(_ context.Context, _ resource.UpdateRequest, _ *resource.UpdateResponse) {
-	// name forces replacement and token is not part of the object's identity;
-	// Update is never called.
+func (r *databaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan databaseModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -165,8 +191,20 @@ func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	if err := r.clientFor(state.Token.ValueString()).Exec(ctx, dropDatabaseSQL(state.Name.ValueString())); err != nil {
-		resp.Diagnostics.AddError("Failed to delete database", err.Error())
+	switch state.DeletionPolicy.ValueString() {
+	case "prevent":
+		resp.Diagnostics.AddError(
+			"Deletion prevented by deletion_policy",
+			fmt.Sprintf("Database %q has deletion_policy = %q. Set deletion_policy to "+
+				"\"cascade\" or \"retain\" and apply before destroying.",
+				state.Name.ValueString(), "prevent"),
+		)
+	case "retain":
+		// Remove from state without running DROP DATABASE; the database survives in MotherDuck.
+	case "cascade":
+		if err := r.clientFor(state.Token.ValueString()).Exec(ctx, dropDatabaseCascadeSQL(state.Name.ValueString())); err != nil {
+			resp.Diagnostics.AddError("Failed to delete database", err.Error())
+		}
 	}
 }
 
@@ -179,4 +217,5 @@ func (r *databaseResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("token"), token)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), name)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), name)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("deletion_policy"), "prevent")...)
 }
