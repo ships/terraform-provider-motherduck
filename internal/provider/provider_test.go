@@ -8,6 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
@@ -47,6 +49,15 @@ resource "motherduck_service_account" "etl" {
 				ImportStateId:     "svc_etl",
 				ImportStateVerify: true,
 			},
+			{
+				// Relax the default so the framework's post-test destroy may proceed.
+				Config: providerConfig(baseURL) + `
+resource "motherduck_service_account" "etl" {
+  username        = "svc_etl"
+  deletion_policy = "cascade"
+}
+`,
+			},
 		},
 	})
 }
@@ -71,6 +82,110 @@ resource "motherduck_service_account" "bad" {
 	})
 }
 
+func TestAccServiceAccountDeletionPolicyDefault(t *testing.T) {
+	api := newMockAPI()
+	baseURL := api.start(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(baseURL) + `
+resource "motherduck_service_account" "d" {
+  username = "svc_default"
+}
+`,
+				Check: resource.TestCheckResourceAttr("motherduck_service_account.d", "deletion_policy", "prevent"),
+			},
+			{
+				Config: providerConfig(baseURL) + `
+resource "motherduck_service_account" "d" {
+  username = "svc_default"
+}
+`,
+				PlanOnly: true,
+			},
+			{
+				Config: providerConfig(baseURL) + `
+resource "motherduck_service_account" "d" {
+  username        = "svc_default"
+  deletion_policy = "cascade"
+}
+`,
+			},
+		},
+	})
+}
+
+func TestAccServiceAccountDeletionPolicyPrevent(t *testing.T) {
+	api := newMockAPI()
+	baseURL := api.start(t)
+
+	prevent := providerConfig(baseURL) + `
+resource "motherduck_service_account" "p" {
+  username        = "svc_prevent"
+  deletion_policy = "prevent"
+}
+`
+	cascade := providerConfig(baseURL) + `
+resource "motherduck_service_account" "p" {
+  username        = "svc_prevent"
+  deletion_policy = "cascade"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: prevent,
+				Check:  resource.TestCheckResourceAttr("motherduck_service_account.p", "deletion_policy", "prevent"),
+			},
+			{
+				Config:      prevent,
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`deletion_policy`),
+			},
+			{
+				Config: cascade,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("motherduck_service_account.p", plancheck.ResourceActionUpdate),
+					},
+				},
+			},
+		},
+	})
+}
+
+func TestAccServiceAccountDeletionPolicyRetain(t *testing.T) {
+	api := newMockAPI()
+	baseURL := api.start(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: func(_ *terraform.State) error {
+			api.mu.Lock()
+			defer api.mu.Unlock()
+			if !api.users["svc_retain"] {
+				return fmt.Errorf("retain deleted the user; expected it to survive")
+			}
+			return nil
+		},
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(baseURL) + `
+resource "motherduck_service_account" "r" {
+  username        = "svc_retain"
+  deletion_policy = "retain"
+}
+`,
+				Check: resource.TestCheckResourceAttr("motherduck_service_account.r", "deletion_policy", "retain"),
+			},
+		},
+	})
+}
+
 func TestAccToken(t *testing.T) {
 	api := newMockAPI()
 	baseURL := api.start(t)
@@ -82,6 +197,7 @@ func TestAccToken(t *testing.T) {
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
   username = "svc_etl"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_token" "ci" {
@@ -102,6 +218,7 @@ resource "motherduck_token" "ci" {
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
   username = "svc_etl"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_token" "ci" {
@@ -153,6 +270,7 @@ func TestAccDucklingConfig(t *testing.T) {
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
   username = "svc_etl"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_duckling_config" "etl" {
@@ -180,6 +298,7 @@ resource "motherduck_duckling_config" "etl" {
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
   username = "svc_etl"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_duckling_config" "etl" {
@@ -216,6 +335,7 @@ func TestAccDataSources(t *testing.T) {
 				Config: providerConfig(baseURL) + `
 resource "motherduck_service_account" "etl" {
   username = "svc_etl"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_token" "ci" {
