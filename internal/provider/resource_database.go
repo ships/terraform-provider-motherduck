@@ -40,10 +40,6 @@ func createDatabaseSQL(name string) string {
 	return "CREATE DATABASE " + quoteIdent(name) + ";"
 }
 
-func dropDatabaseSQL(name string) string {
-	return "DROP DATABASE " + quoteIdent(name) + ";"
-}
-
 func dropDatabaseCascadeSQL(name string) string {
 	return "DROP DATABASE " + quoteIdent(name) + " CASCADE;"
 }

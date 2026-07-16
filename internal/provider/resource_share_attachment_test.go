@@ -60,8 +60,9 @@ func TestAccShareAttachment_basic(t *testing.T) {
 			{
 				Config: `
 resource "motherduck_database" "src" {
-  name  = "tf_provider_acc_attach_src"
-  token = "` + token + `"
+  name            = "tf_provider_acc_attach_src"
+  token           = "` + token + `"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_share" "demo" {

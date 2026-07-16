@@ -17,14 +17,6 @@ func TestDatabaseCreateSQL(t *testing.T) {
 	}
 }
 
-func TestDatabaseDropSQL(t *testing.T) {
-	got := dropDatabaseSQL("example_db")
-	want := `DROP DATABASE "example_db";`
-	if got != want {
-		t.Fatalf("dropDatabaseSQL: got %q, want %q", got, want)
-	}
-}
-
 func TestDatabaseDropCascadeSQL(t *testing.T) {
 	got := dropDatabaseCascadeSQL("example_db")
 	want := `DROP DATABASE "example_db" CASCADE;`
@@ -61,8 +53,9 @@ func TestAccDatabase_basic(t *testing.T) {
 			{
 				Config: `
 resource "motherduck_database" "demo" {
-  name  = "tf_provider_acc_demo"
-  token = "` + token + `"
+  name            = "tf_provider_acc_demo"
+  token           = "` + token + `"
+  deletion_policy = "cascade"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
