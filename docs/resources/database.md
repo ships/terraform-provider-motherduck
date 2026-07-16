@@ -12,8 +12,11 @@ connection authenticated with a per-resource account `token` rather than the pro
 admin token. This lets one provider configuration manage databases across many accounts,
 and lets the `token` reference a `motherduck_token` created in the same apply.
 
-~> **Destroying this resource drops the database. `DROP DATABASE` uses the default
-`RESTRICT`, so the delete fails if a share was created from this database.**
+~> **`deletion_policy` defaults to `prevent`: destroying is refused until you change it.**
+Set `deletion_policy = "cascade"` to run `DROP DATABASE ... CASCADE` (drops the database and
+its dependents), or `deletion_policy = "retain"` to remove it from Terraform state while leaving
+the database in MotherDuck. `prevent` also blocks the replacement Terraform plans when you change
+`name`.
 
 -> Refresh detects drift by scanning `SHOW ALL DATABASES` for the database `name` (its
 `alias` column); a database absent from that listing is removed from state.
@@ -43,6 +46,11 @@ resource "motherduck_database" "warehouse" {
 - `name` (String) Name of the database. Changing it replaces the database.
 - `token` (String, Sensitive) Data-plane token of the account that owns this database
   (e.g. `motherduck_token.x.token`). The `CREATE DATABASE` DDL runs as this account.
+
+### Optional
+
+- `deletion_policy` (String) Behavior when this resource is destroyed: `prevent` (default),
+  `retain`, or `cascade`. See the note above. Changing it is an in-place update, not a replacement.
 
 ### Read-Only
 
