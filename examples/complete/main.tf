@@ -11,6 +11,9 @@ provider "motherduck" {}
 # A service account for a data pipeline.
 resource "motherduck_service_account" "etl" {
   username = "svc_etl"
+
+  # prevent (the default) refuses `terraform destroy`; set "cascade" or "retain" to allow it.
+  deletion_policy = "prevent"
 }
 
 # A 90-day read/write token for it. The secret is in state; ship it to a

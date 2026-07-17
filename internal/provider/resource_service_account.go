@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -38,8 +39,9 @@ type serviceAccountResource struct {
 }
 
 type serviceAccountModel struct {
-	ID       types.String `tfsdk:"id"`
-	Username types.String `tfsdk:"username"`
+	ID             types.String `tfsdk:"id"`
+	Username       types.String `tfsdk:"username"`
+	DeletionPolicy types.String `tfsdk:"deletion_policy"`
 }
 
 func (r *serviceAccountResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -50,7 +52,9 @@ func (r *serviceAccountResource) Schema(_ context.Context, _ resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A MotherDuck service-account user (`POST /v1/users`). The API currently " +
 			"creates users with the **Member** role only.\n\n" +
-			"~> **Destroying this resource permanently deletes the user and all of their data. This cannot be undone.**",
+			"~> **`deletion_policy` defaults to `prevent`, so destroying is refused until you set it to " +
+			"`cascade` (permanently deletes the user and all their data) or `retain` (drops it from state, " +
+			"keeps the user). `cascade` cannot be undone.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -66,6 +70,18 @@ func (r *serviceAccountResource) Schema(_ context.Context, _ resource.SchemaRequ
 						"must contain only letters, numbers, and underscores"),
 				},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"deletion_policy": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("prevent"),
+				MarkdownDescription: "Behavior when this resource is destroyed: `prevent` (default) refuses the " +
+					"destroy so Terraform keeps managing the account; `retain` removes it from Terraform state " +
+					"while leaving the user in MotherDuck; `cascade` permanently deletes the user and all of " +
+					"their data. Changing this value is an in-place update, not a replacement.",
+				Validators: []validator.String{
+					stringvalidator.OneOf("cascade", "retain", "prevent"),
+				},
 			},
 		},
 	}
@@ -123,8 +139,13 @@ func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *serviceAccountResource) Update(_ context.Context, _ resource.UpdateRequest, _ *resource.UpdateResponse) {
-	// All attributes force replacement; Update is never called.
+func (r *serviceAccountResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan serviceAccountModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *serviceAccountResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -134,13 +155,26 @@ func (r *serviceAccountResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	err := r.client.DeleteUser(ctx, state.Username.ValueString())
-	if err != nil && !client.IsNotFound(err) {
-		resp.Diagnostics.AddError("Failed to delete service account", err.Error())
+	switch state.DeletionPolicy.ValueString() {
+	case "prevent":
+		resp.Diagnostics.AddError(
+			"Deletion prevented by deletion_policy",
+			fmt.Sprintf("Service account %q has deletion_policy = %q. Set deletion_policy to "+
+				"\"cascade\" or \"retain\" and apply before destroying.",
+				state.Username.ValueString(), "prevent"),
+		)
+	case "retain":
+		// Remove from state without deleting the user; the account survives in MotherDuck.
+	case "cascade":
+		err := r.client.DeleteUser(ctx, state.Username.ValueString())
+		if err != nil && !client.IsNotFound(err) {
+			resp.Diagnostics.AddError("Failed to delete service account", err.Error())
+		}
 	}
 }
 
 func (r *serviceAccountResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("username"), req, resp)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("deletion_policy"), "prevent")...)
 }

@@ -113,8 +113,9 @@ func TestAccShare_basic(t *testing.T) {
 			{
 				Config: `
 resource "motherduck_database" "src" {
-  name  = "tf_provider_acc_share_src"
-  token = "` + token + `"
+  name            = "tf_provider_acc_share_src"
+  token           = "` + token + `"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_share" "demo" {
@@ -218,8 +219,9 @@ func TestAccShareDuckDBManual(t *testing.T) {
 			{
 				Config: `
 resource "motherduck_database" "src" {
-  name  = "tf_provider_acc_manual_src"
-  token = "` + token + `"
+  name            = "tf_provider_acc_manual_src"
+  token           = "` + token + `"
+  deletion_policy = "cascade"
 }
 
 resource "motherduck_share" "manual" {
